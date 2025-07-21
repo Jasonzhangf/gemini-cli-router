@@ -11,9 +11,7 @@
     "postinstall": "node setup-post-install.js",
     "preuninstall": "node cleanup-pre-uninstall.js",
     "start": "./gcr-gemini",
-    "test": "node test-proxy.js",
-    "install-global": "./install-gcr-simple.sh",
-    "uninstall-global": "./uninstall-gcr.sh"
+    "test": "node test-proxy.js"
   },
   "keywords": [
     "gemini",

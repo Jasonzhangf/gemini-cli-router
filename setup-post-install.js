@@ -66,12 +66,29 @@ GCR_DEBUG=false
 
   // Install proxy service dependencies
   console.log('📦 Installing proxy service dependencies...');
-  const proxyDir = join(process.cwd(), 'proxy-service');
+  
+  // When installed via npm, the package is in node_modules
+  let proxyDir = join(process.cwd(), 'proxy-service');
+  
+  // Check if we're in a global npm installation
+  if (!existsSync(proxyDir)) {
+    // Try to find the proxy service in the npm package directory
+    const packageDir = process.cwd();
+    proxyDir = join(packageDir, 'proxy-service');
+  }
   
   if (existsSync(proxyDir)) {
+    const originalCwd = process.cwd();
     process.chdir(proxyDir);
-    execSync('npm install', { stdio: 'inherit' });
-    console.log('✅ Proxy service dependencies installed');
+    
+    try {
+      execSync('npm install', { stdio: 'inherit' });
+      console.log('✅ Proxy service dependencies installed');
+    } catch (error) {
+      console.warn('⚠️  Failed to install proxy service dependencies:', error.message);
+    } finally {
+      process.chdir(originalCwd);
+    }
   } else {
     console.warn('⚠️  Proxy service directory not found, skipping dependency installation');
   }

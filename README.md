@@ -15,21 +15,36 @@ GCR is a proxy system that intercepts Google Gemini CLI requests and routes them
 
 ## 🚀 Quick Start
 
+### Prerequisites
+
+**Step 1: Install Official Gemini CLI**
+```bash
+# Install the official Google Gemini CLI first
+npm install -g @google/gemini-cli
+```
+
 ### Installation
 
+**Step 2: Install GCR**
+
+#### Method 1: Direct NPM Install (Recommended)
+```bash
+npm install -g gemini-cli-router
+```
+
+#### Method 2: From Source
 ```bash
 # Clone the repository
 git clone https://github.com/Jasonzhangf/gemini-cli-router.git
 cd gemini-cli-router
 
-# Install globally using npm
-./install-gcr-simple.sh
-
-# Or install manually
+# Install globally from source
 npm install -g .
 ```
 
 ### Configuration
+
+**Step 3: Configure GCR**
 
 1. Edit your configuration file:
 ```bash
@@ -55,7 +70,9 @@ GCR_DEBUG=false
 
 ### Usage
 
-Once installed, use `gcr` instead of `gemini`:
+**Step 4: Start Using GCR**
+
+Once installed and configured, use `gcr` instead of `gemini`:
 
 ```bash
 # Interactive chat
@@ -113,31 +130,50 @@ Set `GCR_API_KEY` in your config file to use API key authentication and avoid OA
 ### OAuth
 Leave `GCR_API_KEY` empty to use OAuth authentication (you'll be prompted to authenticate).
 
-## 📦 Installation Methods
+## 📦 Complete Installation Guide
 
-### Method 1: Simple Install Script
-```bash
-./install-gcr-simple.sh
-```
+### Step-by-Step Installation
 
-### Method 2: Manual NPM Install
-```bash
-npm install -g .
-```
+1. **Install Official Gemini CLI (Required)**
+   ```bash
+   npm install -g @google/gemini-cli
+   ```
 
-### Method 3: Advanced Install
-```bash
-./install-gcr.sh
-```
+2. **Install GCR via NPM (Recommended)**
+   ```bash
+   npm install -g gemini-cli-router
+   ```
+
+3. **Alternative: Install from Source**
+   ```bash
+   git clone https://github.com/Jasonzhangf/gemini-cli-router.git
+   cd gemini-cli-router
+   npm install -g .
+   ```
+
+4. **Configure Your Provider**
+   ```bash
+   # Edit configuration
+   nano ~/.gemini-cli-router/.env
+   
+   # Add your settings
+   GCR_PROVIDER=shuaihong
+   GCR_TARGET_API_KEY=your_api_key_here
+   ```
+
+5. **Start Using**
+   ```bash
+   gcr chat "Hello, world!"
+   ```
 
 ## 🗑️ Uninstallation
 
 ```bash
-# Using included script
-./uninstall-gcr.sh
-
-# Or manually
+# Uninstall GCR
 npm uninstall -g gemini-cli-router
+
+# Optional: Uninstall Official Gemini CLI
+npm uninstall -g @google/gemini-cli
 ```
 
 ## 🧪 Testing
@@ -169,6 +205,9 @@ chmod +x gcr-gemini install-gcr-simple.sh uninstall-gcr.sh
 
 **OAuth every time:**
 - Set `GCR_API_KEY` in `~/.gemini-cli-router/.env` to avoid OAuth prompts
+
+**Official Gemini CLI not found:**
+- Make sure you installed it first: `npm install -g @google/gemini-cli`
 
 ### Debug Mode
 
