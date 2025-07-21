@@ -1,0 +1,19 @@
+{
+  "name": "gemini-cli-router",
+  "version": "1.0.0",
+  "description": "A proxy service that routes Gemini API requests to third-party providers",
+  "main": "src/server.js",
+  "type": "module",
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "node --watch src/server.js"
+  },
+  "keywords": ["proxy", "gemini", "claude", "api", "router"],
+  "author": "Jason Zhang",
+  "license": "MIT",
+  "dependencies": {
+    "express": "^4.18.2",
+    "cors": "^2.8.5",
+    "node-fetch": "^3.3.2"
+  }
+}

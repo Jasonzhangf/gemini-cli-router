@@ -1,0 +1,61 @@
+{
+  "name": "gemini-cli-router",
+  "version": "1.0.0",
+  "description": "Gemini CLI Router for Third-Party AI Providers - Route Gemini CLI requests to SHUAIHONG, DeepSeek, OpenAI, Claude and other providers",
+  "main": "gcr-gemini",
+  "type": "module",
+  "bin": {
+    "gcr": "./gcr-gemini"
+  },
+  "scripts": {
+    "postinstall": "node setup-post-install.js",
+    "preuninstall": "node cleanup-pre-uninstall.js",
+    "start": "./gcr-gemini",
+    "test": "node test-proxy.js",
+    "install-global": "./install-gcr-simple.sh",
+    "uninstall-global": "./uninstall-gcr.sh"
+  },
+  "keywords": [
+    "gemini",
+    "cli",
+    "router",
+    "ai",
+    "proxy",
+    "shuaihong",
+    "deepseek",
+    "openai",
+    "claude",
+    "third-party",
+    "api",
+    "translator"
+  ],
+  "author": "Jason Zhang",
+  "license": "MIT",
+  "dependencies": {
+    "node-fetch": "^3.3.2"
+  },
+  "engines": {
+    "node": ">=16.0.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Jasonzhangf/gemini-cli-router.git"
+  },
+  "homepage": "https://github.com/Jasonzhangf/gemini-cli-router#readme",
+  "bugs": {
+    "url": "https://github.com/Jasonzhangf/gemini-cli-router/issues"
+  },
+  "preferGlobal": true,
+  "files": [
+    "gcr-gemini",
+    "proxy-service/",
+    "setup-post-install.js",
+    "cleanup-pre-uninstall.js",
+    "install-gcr-simple.sh",
+    "install-gcr.sh",
+    "uninstall-gcr.sh",
+    "setup-proxy.sh",
+    "test-proxy.js",
+    "README.md"
+  ]
+}

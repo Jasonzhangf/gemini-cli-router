@@ -1,0 +1,45 @@
+{
+  "name": "gemini-cli-router",
+  "version": "1.0.0",
+  "description": "Gemini CLI Router for Third-Party AI Providers",
+  "main": "gcr-gemini",
+  "type": "module",
+  "bin": {
+    "gcr": "./gcr-gemini"
+  },
+  "scripts": {
+    "postinstall": "node setup-post-install.js",
+    "preuninstall": "node cleanup-pre-uninstall.js"
+  },
+  "keywords": [
+    "gemini",
+    "cli",
+    "router",
+    "ai",
+    "proxy",
+    "shuaihong",
+    "deepseek",
+    "openai",
+    "claude"
+  ],
+  "author": "Jason Zhang",
+  "license": "MIT",
+  "dependencies": {
+    "node-fetch": "^3.3.2"
+  },
+  "engines": {
+    "node": ">=16.0.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/yourusername/gemini-cli-router.git"
+  },
+  "preferGlobal": true,
+  "files": [
+    "gcr-gemini",
+    "proxy-service/",
+    "setup-post-install.js",
+    "cleanup-pre-uninstall.js",
+    "README-GCR.md"
+  ]
+}

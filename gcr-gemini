@@ -1,0 +1,423 @@
+#!/usr/bin/env node
+
+/**
+ * GCR-Gemini - Gemini CLI Router for Third-Party AI Providers
+ * A wrapper script that intercepts gemini commands and routes them through our proxy
+ * 
+ * @author Jason Zhang
+ */
+
+import { spawn, exec } from 'child_process';
+import { fileURLToPath } from 'url';
+import { dirname, join } from 'path';
+import { existsSync, mkdirSync, readFileSync } from 'fs';
+import { homedir } from 'os';
+import fetch from 'node-fetch';
+import { createRequire } from 'module';
+
+const require = createRequire(import.meta.url);
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+
+/**
+ * Print debug message (temporary for loading)
+ */
+function debugTemp(message) {
+  if (process.env.GCR_DEBUG === 'true') {
+    console.log(`[GCR-Gemini] ${message}`);
+  }
+}
+
+// Configuration directory
+const configDir = join(homedir(), '.gemini-cli-router');
+const configFile = join(configDir, '.env');
+
+/**
+ * Load configuration from ~/.gemini-cli-router/.env
+ */
+function loadConfig() {
+  // Create config directory if it doesn't exist
+  if (!existsSync(configDir)) {
+    mkdirSync(configDir, { recursive: true });
+    debugTemp(`Created config directory: ${configDir}`);
+  }
+  
+  // Load .env file if it exists
+  let envConfig = {};
+  if (existsSync(configFile)) {
+    try {
+      const envContent = readFileSync(configFile, 'utf8');
+      envContent.split('\n').forEach(line => {
+        line = line.trim();
+        if (line && !line.startsWith('#') && line.includes('=')) {
+          const [key, ...valueParts] = line.split('=');
+          const value = valueParts.join('=').replace(/^["']|["']$/g, '');
+          envConfig[key.trim()] = value.trim();
+        }
+      });
+      debugTemp(`Loaded config from ${configFile}`);
+    } catch (error) {
+      console.warn(`Warning: Could not read config file ${configFile}: ${error.message}`);
+    }
+  }
+  
+  return envConfig;
+}
+
+// Parse command line arguments for model override
+const originalArgs = process.argv.slice(2);
+let modelOverride = null;
+let filteredArgs = [];
+
+for (let i = 0; i < originalArgs.length; i++) {
+  if ((originalArgs[i] === '-m' || originalArgs[i] === '--model') && i + 1 < originalArgs.length) {
+    modelOverride = originalArgs[i + 1];
+    i++; // Skip the next argument (model name)
+  } else {
+    filteredArgs.push(originalArgs[i]);
+  }
+}
+
+// Load configuration
+const envConfig = loadConfig();
+
+// Configuration with priority: CLI args > process.env > config file > defaults
+const config = {
+  proxyPort: process.env.GCR_PORT || envConfig.GCR_PORT || 3458,
+  proxyHost: process.env.GCR_HOST || envConfig.GCR_HOST || 'localhost',
+  apiKey: process.env.GCR_API_KEY || envConfig.GCR_API_KEY || '',
+  provider: process.env.GCR_PROVIDER || envConfig.GCR_PROVIDER || 'shuaihong',
+  model: modelOverride || process.env.GCR_MODEL || envConfig.GCR_MODEL || 'gpt-4o',
+  targetApiKey: process.env.GCR_TARGET_API_KEY || envConfig.GCR_TARGET_API_KEY || '',
+  baseUrl: process.env.GCR_BASE_URL || envConfig.GCR_BASE_URL || 'https://ai.shuaihong.fun/v1',
+  debug: process.env.GCR_DEBUG === 'true' || envConfig.GCR_DEBUG === 'true' || false,
+  
+  // Proxy service path
+  proxyServicePath: join(__dirname, 'proxy-service'),
+  
+  // Original gemini command (will try to find in PATH)
+  geminiCommand: 'gemini'
+};
+
+/**
+ * Print debug message
+ */
+function debug(message) {
+  if (config.debug) {
+    console.log(`[GCR-Gemini] ${message}`);
+  }
+}
+
+/**
+ * Print error message
+ */
+function error(message) {
+  console.error(`[GCR-Gemini Error] ${message}`);
+}
+
+/**
+ * Print info message
+ */
+function info(message) {
+  console.log(`[GCR-Gemini] ${message}`);
+}
+
+/**
+ * Find the correct gemini command path
+ */
+function findGeminiCommand() {
+  const { execSync } = require('child_process');
+  
+  try {
+    // Try to find gemini in PATH
+    const geminiPath = execSync('which gemini', { encoding: 'utf8' }).trim();
+    
+    // Check if it's the official gemini-cli
+    try {
+      const output = execSync(`${geminiPath} --version 2>/dev/null || echo ""`, { encoding: 'utf8' });
+      if (output.includes('0.') || output.includes('gemini')) {
+        return geminiPath;
+      }
+    } catch (e) {
+      // If version check fails, might not be the right gemini
+    }
+    
+    // Try to find @google/gemini-cli directly
+    const npmList = execSync('npm list -g @google/gemini-cli --depth=0 2>/dev/null || echo ""', { encoding: 'utf8' });
+    if (npmList.includes('@google/gemini-cli')) {
+      // Found global installation, try to find the executable
+      try {
+        const npmRoot = execSync('npm root -g', { encoding: 'utf8' }).trim();
+        const officialPath = `${npmRoot}/@google/gemini-cli/dist/index.js`;
+        if (existsSync(officialPath)) {
+          return `node ${officialPath}`;
+        }
+      } catch (e) {
+        // Continue with fallback
+      }
+    }
+    
+    // Fallback to gemini in PATH
+    return 'gemini';
+    
+  } catch (error) {
+    // If which command fails, assume gemini is in PATH
+    return 'gemini';
+  }
+}
+
+/**
+ * Check if proxy service is running
+ */
+function checkProxyStatus() {
+  return new Promise(async (resolve) => {
+    try {
+      const response = await fetch(`http://${config.proxyHost}:${config.proxyPort}/health`, {
+        method: 'GET',
+        timeout: 1000
+      });
+      resolve(response.ok);
+    } catch (error) {
+      resolve(false);
+    }
+  });
+}
+
+/**
+ * Kill processes using the proxy port
+ */
+function killPortProcesses() {
+  return new Promise((resolve) => {
+    const { execSync } = require('child_process');
+    
+    try {
+      // Find processes using the port
+      const result = execSync(`lsof -ti:${config.proxyPort}`, { encoding: 'utf8' }).trim();
+      
+      if (result) {
+        const pids = result.split('\n').filter(pid => pid.trim());
+        debug(`Found processes using port ${config.proxyPort}: ${pids.join(', ')}`);
+        
+        // Kill each process
+        pids.forEach(pid => {
+          try {
+            execSync(`kill -9 ${pid}`, { stdio: 'ignore' });
+            debug(`Killed process ${pid}`);
+          } catch (error) {
+            debug(`Failed to kill process ${pid}: ${error.message}`);
+          }
+        });
+        
+        // Wait a moment for processes to die
+        setTimeout(resolve, 1000);
+      } else {
+        resolve();
+      }
+    } catch (error) {
+      // No processes found on port, or lsof command failed
+      resolve();
+    }
+  });
+}
+
+/**
+ * Start the proxy service
+ */
+function startProxyService() {
+  return new Promise((resolve, reject) => {
+    debug('Starting Gemini CLI Router proxy service...');
+    
+    if (!existsSync(config.proxyServicePath)) {
+      reject(new Error(`Proxy service not found at: ${config.proxyServicePath}`));
+      return;
+    }
+    
+    // Set environment variables for the proxy service
+    const env = {
+      ...process.env,
+      GCR_PORT: config.proxyPort,
+      GCR_HOST: config.proxyHost,
+      GCR_PROVIDER: config.provider,
+      GCR_MODEL: config.model,
+      GCR_BASE_URL: config.baseUrl,
+      GCR_DEBUG: config.debug,
+      GCR_TARGET_API_KEY: config.targetApiKey
+    };
+    
+    const proxyProcess = spawn('node', ['src/server.js'], {
+      cwd: config.proxyServicePath,
+      env,
+      detached: true,
+      stdio: config.debug ? 'inherit' : 'ignore'
+    });
+    
+    // Give the service time to start
+    setTimeout(async () => {
+      const isRunning = await checkProxyStatus();
+      if (isRunning) {
+        debug(`Proxy service started successfully on port ${config.proxyPort}`);
+        resolve(proxyProcess);
+      } else {
+        reject(new Error('Failed to start proxy service'));
+      }
+    }, 2000);
+    
+    proxyProcess.on('error', (err) => {
+      reject(new Error(`Failed to start proxy service: ${err.message}`));
+    });
+  });
+}
+
+/**
+ * Execute the original gemini command with proxy configuration
+ */
+function executeGeminiCommand(args) {
+  return new Promise((resolve, reject) => {
+    debug(`Executing gemini command with args: ${args.join(' ')}`);
+    
+    // Find the correct gemini command
+    const geminiCommand = findGeminiCommand();
+    debug(`Using gemini command: ${geminiCommand}`);
+    
+    // Prepare the environment for gemini to use our proxy
+    const env = {
+      ...process.env,
+      // Use Gemini API key if provided to bypass OAuth
+      ...(config.apiKey ? { GEMINI_API_KEY: config.apiKey } : {}),
+      // Override Google AI Studio endpoint to point to our proxy
+      GOOGLE_AI_STUDIO_BASE_URL: `http://${config.proxyHost}:${config.proxyPort}`,
+      // Also override Gemini API endpoint
+      GEMINI_API_BASE_URL: `http://${config.proxyHost}:${config.proxyPort}`,
+      // Set target provider info for proxy
+      GCR_TARGET_PROVIDER: config.provider,
+      GCR_TARGET_MODEL: config.model
+    };
+    
+    debug(`Setting GEMINI_API_BASE_URL to: ${env.GEMINI_API_BASE_URL}`);
+    debug(`Using GEMINI_API_KEY: ${config.apiKey ? '***' : 'not set'}`);
+    
+    // Handle both simple command and node command
+    let cmd, cmdArgs;
+    if (geminiCommand.startsWith('node ')) {
+      cmd = 'node';
+      cmdArgs = [geminiCommand.split(' ')[1], ...args];
+    } else {
+      cmd = geminiCommand;
+      cmdArgs = args;
+    }
+    
+    const geminiProcess = spawn(cmd, cmdArgs, {
+      env,
+      stdio: 'inherit'
+    });
+    
+    geminiProcess.on('close', (code) => {
+      debug(`Gemini process exited with code: ${code}`);
+      resolve(code);
+    });
+    
+    geminiProcess.on('error', (err) => {
+      error(`Failed to execute gemini command: ${err.message}`);
+      reject(err);
+    });
+  });
+}
+
+/**
+ * Main function
+ */
+async function main() {
+  const args = filteredArgs;
+  
+  // Show help only if explicitly requested
+  if (args[0] === '--help' || args[0] === '-h') {
+    console.log(`
+🤖 GCR-Gemini - Gemini CLI Router for Third-Party AI Providers
+
+Usage: gcr-gemini [gemini-command-args...]
+
+Examples:
+  gcr-gemini chat "Hello, how are you?"
+  gcr-gemini --help
+  gcr-gemini config
+  
+Environment Variables:
+  GCR_API_KEY      - Gemini API key (optional, if not set uses OAuth)
+  GCR_PROVIDER     - Target provider: shuaihong, deepseek, openai, claude (default: shuaihong)
+  GCR_MODEL        - Model to use (default: gpt-4o)
+  GCR_PORT         - Proxy service port (default: 3458)
+  GCR_HOST         - Proxy service host (default: localhost)
+  GCR_DEBUG        - Enable debug logging (default: false)
+
+Configuration:
+  Provider: ${config.provider}
+  Model: ${config.model} ${modelOverride ? '(overridden by -m)' : ''}
+  Base URL: ${config.baseUrl}
+  Proxy: http://${config.proxyHost}:${config.proxyPort}
+  Debug: ${config.debug}
+  Auth: ${config.apiKey ? 'API Key' : 'OAuth'}
+  Config Dir: ${configDir}
+
+Note: Configuration loaded from ~/.gemini-cli-router/.env
+      Set GCR_API_KEY to your Gemini API key, or leave empty to use OAuth authentication.
+`);
+    return;
+  }
+  
+  // API key is optional - if not provided, will use OAuth
+  if (!config.apiKey) {
+    info('GCR_API_KEY not provided, will use OAuth authentication');
+    info('To avoid OAuth prompts, set GCR_API_KEY in ~/.gemini-cli-router/.env');
+  }
+  
+  // Check if target API key is configured
+  if (!config.targetApiKey) {
+    error('GCR_TARGET_API_KEY is required for third-party provider access!');
+    error(`Please set GCR_TARGET_API_KEY in ${configFile}`);
+    error(`Current provider: ${config.provider}`);
+    process.exit(1);
+  }
+  
+  try {
+    // Check if proxy is already running
+    const isProxyRunning = await checkProxyStatus();
+    
+    if (!isProxyRunning) {
+      info('Starting proxy service...');
+      
+      // Kill any processes using the port before starting
+      await killPortProcesses();
+      
+      await startProxyService();
+      info('✅ Proxy service is ready!');
+    } else {
+      debug('Proxy service is already running');
+    }
+    
+    // Execute the gemini command
+    const exitCode = await executeGeminiCommand(args);
+    process.exit(exitCode);
+    
+  } catch (err) {
+    error(err.message);
+    process.exit(1);
+  }
+}
+
+// Handle uncaught exceptions
+process.on('uncaughtException', (err) => {
+  error(`Uncaught exception: ${err.message}`);
+  process.exit(1);
+});
+
+process.on('unhandledRejection', (reason) => {
+  error(`Unhandled rejection: ${reason}`);
+  process.exit(1);
+});
+
+// Run main function
+main().catch((err) => {
+  error(err.message);
+  process.exit(1);
+});
