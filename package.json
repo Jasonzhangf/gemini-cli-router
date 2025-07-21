@@ -1,6 +1,6 @@
 {
   "name": "gemini-cli-router",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Gemini CLI Router for Third-Party AI Providers - Route Gemini CLI requests to SHUAIHONG, DeepSeek, OpenAI, Claude and other providers",
   "main": "gcr-gemini",
   "type": "module",

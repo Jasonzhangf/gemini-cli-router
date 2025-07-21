@@ -124,6 +124,23 @@ function info(message) {
 }
 
 /**
+ * Display current GCR status information
+ */
+function displayStatus() {
+  console.log('');
+  console.log('🚀 Gemini CLI Router Status:');
+  console.log(`   📡 Proxy Port: ${config.proxyPort}`);
+  console.log(`   🤖 Provider: ${config.provider.toUpperCase()}`);
+  console.log(`   🧠 Model: ${config.model}`);
+  console.log(`   🔑 Auth: ${config.apiKey ? 'API Key' : 'OAuth'}`);
+  if (config.debug) {
+    console.log(`   🐛 Debug: enabled`);
+    console.log(`   🔗 Base URL: ${config.baseUrl}`);
+  }
+  console.log('');
+}
+
+/**
  * Find the correct gemini command path
  */
 function findGeminiCommand() {
@@ -391,8 +408,15 @@ Note: Configuration loaded from ~/.gemini-cli-router/.env
       
       await startProxyService();
       info('✅ Proxy service is ready!');
+      
+      // Display status information
+      displayStatus();
     } else {
       debug('Proxy service is already running');
+      info('Using existing proxy service');
+      
+      // Display status information
+      displayStatus();
     }
     
     // Execute the gemini command
